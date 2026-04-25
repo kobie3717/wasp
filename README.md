@@ -26,6 +26,10 @@
 
 ---
 
+> **WhatsApp Session Protocol for Node.js.** Drop-in session infrastructure for Baileys. Built-in reconnection, rate limiting, secure credential storage, and multi-tenant isolation — everything Baileys leaves out.
+> 
+> Baileys alternative · whatsapp-web.js alternative · Secure session management · npm install wasp-protocol
+
 ## Used in Production
 
 WaSP powers real-world WhatsApp integrations:
@@ -43,6 +47,20 @@ Building WhatsApp integrations is painful. Every project requires re-implementin
 - Provider-specific quirks
 
 **WaSP solves this.** One unified API across Baileys, Whatsmeow, and Cloud API with batteries included.
+
+## WaSP vs Baileys vs whatsapp-web.js
+
+| Feature | WaSP | Baileys | whatsapp-web.js |
+|---|---|---|---|
+| Session persistence | ✅ Pluggable adapters | ❌ Dropped (DIY) | ⚠️ Basic |
+| Reconnection logic | ✅ Built-in backoff | ❌ DIY | ❌ DIY |
+| Rate limiting | ✅ Built-in governor | ❌ Undocumented (silent bans) | ❌ None |
+| Credential security | ✅ Abstracted store | ❌ Plaintext filesystem | ❌ Plaintext |
+| Multi-tenant | ✅ Isolated per org/user | ❌ Manual | ❌ No |
+| Chrome/Puppeteer | ✅ Not required | ✅ Not required | ❌ 400MB+ |
+| Supply chain | ✅ Known maintainer | ⚠️ lotusbail attack Dec 2025 | ⚠️ Ecosystem risk |
+| TypeScript | ✅ First-class | ⚠️ Partial | ⚠️ Basic |
+| Production-ready | ✅ Yes | ❌ Assembly required | ❌ Regression Jan 2026 |
 
 ## Features
 
