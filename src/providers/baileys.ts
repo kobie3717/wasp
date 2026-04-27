@@ -303,9 +303,26 @@ export class BaileysProvider implements Provider {
             });
           } else if (isBadMac) {
             // Bad MAC errors indicate corrupted session — clear session keys
+            // BUT preserve v7 auth state files (lid-mapping, device-list, tctoken, app-state-sync)
             try {
+              // Files that must survive Bad MAC cleanup (v7 + critical auth data)
+              const V7_PRESERVED_PREFIXES = [
+                'creds',           // Main credentials
+                'lid-mapping',     // v7: LID↔PN bidirectional mapping
+                'device-list',     // v7: Device registration
+                'tctoken',         // v7: Privacy tokens (error 463 prevention)
+                'app-state-sync',  // App state sync keys (not related to E2E)
+              ];
+
               const sessionFiles = fs.readdirSync(authDir)
-                .filter(f => f.startsWith('session-') || f.startsWith('pre-key-') || f.startsWith('sender-key-'));
+                .filter(f => {
+                  if (!f.endsWith('.json')) return false;
+                  // Preserve critical auth files
+                  if (V7_PRESERVED_PREFIXES.some(prefix => f.startsWith(prefix))) return false;
+                  // Delete session/pre-key/sender-key crypto files
+                  return f.startsWith('session-') || f.startsWith('pre-key-') || f.startsWith('sender-key-');
+                });
+
               for (const file of sessionFiles) {
                 fs.unlinkSync(path.join(authDir, file));
               }

@@ -5,6 +5,11 @@ All notable changes to WaSP (WhatsApp Session Protocol) will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-04-27
+
+### Fixed
+- Bad MAC session cleanup now preserves v7 auth state files: `lid-mapping.*`, `device-list.*`, `tctoken.*`, `app-state-sync.*`. Previously these could be accidentally deleted during Bad MAC recovery, requiring full re-registration.
+
 ## [0.4.0] - 2026-04-18
 
 ### Added
