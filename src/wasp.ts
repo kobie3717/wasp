@@ -574,6 +574,17 @@ export class WaSP extends EventEmitter {
         status: 'DISCONNECTED' as SessionStatus,
       });
 
+      // Evict from activeSessions so consumer can call createSession() to reconnect.
+      // Without this, transient drops (Baileys reason -1, 515, 503) leave a zombie
+      // entry that blocks reconnect with "Session already exists".
+      const entry = this.activeSessions.get(sessionId);
+      if (entry) {
+        try {
+          entry.provider.events.removeAllListeners();
+        } catch {}
+        this.activeSessions.delete(sessionId);
+      }
+
       await this.emitEvent({
         type: 'SESSION_DISCONNECTED' as EventType,
         sessionId,
