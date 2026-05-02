@@ -581,7 +581,9 @@ export class WaSP extends EventEmitter {
       if (entry) {
         try {
           entry.provider.events.removeAllListeners();
-        } catch {}
+        } catch {
+          // listeners may already be detached; safe to ignore
+        }
         this.activeSessions.delete(sessionId);
       }
 
