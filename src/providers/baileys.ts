@@ -36,8 +36,16 @@ export interface BaileysProviderOptions {
   logger?: any;
   /** Proxy URL (SOCKS5) */
   proxyUrl?: string;
-  /** Maximum reconnection attempts */
+  /** Maximum reconnection attempts (only used when internalReconnect=true) */
   maxReconnectAttempts?: number;
+  /**
+   * If true, BaileysProvider auto-reconnects internally via setTimeout on
+   * recoverable close events. If false (default), the provider always emits
+   * 'disconnected' on close and lets the consumer (e.g. baileys-keep-alive)
+   * own the reconnect lifecycle. Recommended: false — single source of truth
+   * avoids racing reconnect attempts.
+   */
+  internalReconnect?: boolean;
   /** Allowed media directory (for file path security) */
   allowedMediaDir?: string;
   /** TC token configuration for error 463 prevention */
@@ -98,6 +106,7 @@ export class BaileysProvider implements Provider {
       logger: options?.logger ?? { level: 'silent', child: () => ({ level: 'silent' }) },
       proxyUrl: options?.proxyUrl ?? '',
       maxReconnectAttempts: options?.maxReconnectAttempts ?? 5,
+      internalReconnect: options?.internalReconnect ?? false,
       allowedMediaDir: options?.allowedMediaDir ?? '',
       tcTokenConfig: options?.tcTokenConfig ?? {},
     };
@@ -330,11 +339,21 @@ export class BaileysProvider implements Provider {
               // Ignore cleanup errors
             }
 
-            // Reconnect after cleanup — shorter delay
+            // Reconnect after cleanup — shorter delay (only if internalReconnect enabled)
             if (this.reconnectAttempts < 3) {
               this.reconnectAttempts++;
-              const delay = 2000 + Math.random() * 2000;
-              setTimeout(() => this.connect(this.currentSessionId!), delay);
+              if (this.options.internalReconnect) {
+                const delay = 2000 + Math.random() * 2000;
+                setTimeout(() => this.connect(this.currentSessionId!), delay);
+              } else {
+                this.events.emit('disconnected', { reason: 'badMac', shouldReconnect: true });
+                this.events.emit('event', {
+                  type: EventType.SESSION_DISCONNECTED,
+                  sessionId: this.currentSessionId!,
+                  timestamp: new Date(),
+                  data: { reason: 'badMac', shouldReconnect: true },
+                });
+              }
             } else {
               // Bad MAC persists — full reset needed
               fs.rmSync(authDir, { recursive: true, force: true });
@@ -347,10 +366,20 @@ export class BaileysProvider implements Provider {
               });
             }
           } else if (isStreamError) {
-            // Stream errors are transient — quick reconnect
+            // Stream errors are transient — let consumer reconnect (or self-reconnect if enabled)
             this.reconnectAttempts++;
-            const delay = Math.min(1000 * this.reconnectAttempts, 5000);
-            setTimeout(() => this.connect(this.currentSessionId!), delay);
+            if (this.options.internalReconnect) {
+              const delay = Math.min(1000 * this.reconnectAttempts, 5000);
+              setTimeout(() => this.connect(this.currentSessionId!), delay);
+            } else {
+              this.events.emit('disconnected', { reason: 'streamError', shouldReconnect: true });
+              this.events.emit('event', {
+                type: EventType.SESSION_DISCONNECTED,
+                sessionId: this.currentSessionId!,
+                timestamp: new Date(),
+                data: { reason: 'streamError', shouldReconnect: true },
+              });
+            }
           } else if (reason === 405) {
             // 405 = rate limited — preserve credentials
             this.events.emit('disconnected', { reason: 'rate-limited', shouldReconnect: false });
@@ -360,11 +389,32 @@ export class BaileysProvider implements Provider {
               timestamp: new Date(),
               data: { error: new Error('Rate limited by WhatsApp') },
             });
-          } else if (shouldReconnect && this.reconnectAttempts < this.options.maxReconnectAttempts) {
-            // Auto-reconnect with exponential backoff
+          } else if (shouldReconnect && (this.options.internalReconnect || true)) {
+            // Recoverable disconnect — let consumer (keep-alive) reconnect, or
+            // self-reconnect with exponential backoff if internalReconnect is on.
             this.reconnectAttempts++;
-            const delay = this.getReconnectDelay();
-            setTimeout(() => this.connect(this.currentSessionId!), delay);
+            if (this.options.internalReconnect) {
+              if (this.reconnectAttempts < this.options.maxReconnectAttempts) {
+                const delay = this.getReconnectDelay();
+                setTimeout(() => this.connect(this.currentSessionId!), delay);
+              } else {
+                this.events.emit('disconnected', { reason: 'max-retries', shouldReconnect: false });
+                this.events.emit('event', {
+                  type: EventType.SESSION_DISCONNECTED,
+                  sessionId: this.currentSessionId!,
+                  timestamp: new Date(),
+                  data: { reason: 'max-retries', shouldReconnect: false },
+                });
+              }
+            } else {
+              this.events.emit('disconnected', { reason, shouldReconnect: true });
+              this.events.emit('event', {
+                type: EventType.SESSION_DISCONNECTED,
+                sessionId: this.currentSessionId!,
+                timestamp: new Date(),
+                data: { reason, shouldReconnect: true },
+              });
+            }
           } else if (isLoggedOut) {
             // Logged out — clear auth
             if (!this.isManualDisconnect) {
@@ -478,6 +528,24 @@ export class BaileysProvider implements Provider {
       });
       throw error;
     }
+  }
+
+  /**
+   * Recreate the underlying Baileys socket using existing auth state and
+   * return it. Intended for use by external reconnect managers
+   * (e.g. baileys-keep-alive's reconnectFactory) when internalReconnect is off.
+   */
+  async recreateSocket(): Promise<BaileysSocket | null> {
+    if (!this.currentSessionId) {
+      throw new Error('BaileysProvider.recreateSocket: no active sessionId');
+    }
+    // connect() short-circuits if already connected; force a fresh socket by
+    // resetting the connecting flag so it re-runs the makeWASocket flow.
+    this.isConnecting = false;
+    this._connected = false;
+    this.socket = null;
+    await this.connect(this.currentSessionId);
+    return this.socket;
   }
 
   /**
