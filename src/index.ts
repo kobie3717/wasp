@@ -9,6 +9,8 @@
 
 // Main exports
 export { WaSP } from './wasp.js';
+export { createAdminRouter } from './admin.js';
+export type { AdminRouterOptions } from './admin.js';
 export { MessageQueue } from './queue.js';
 export { WebhookManager } from './webhook.js';
 export { wrapSocket } from './wrap-socket.js';
