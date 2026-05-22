@@ -73,6 +73,7 @@ Building WhatsApp integrations is painful. Every project requires re-implementin
 - 🚀 **Production-ready** - Auto-reconnect, error recovery
 - 📡 **Event-driven** - Normalized events across providers
 - 🐳 **Docker support** - Ready-to-deploy containers
+- 🖥️ **Admin router** - Built-in Express routes for session management UI
 
 ## Quick Start
 
@@ -212,6 +213,38 @@ const wasp = new WaSP({
   }),
 });
 ```
+
+### Admin Router
+
+Mount a ready-made Express router to manage sessions over HTTP — connect, disconnect, list, and get QR codes without writing custom endpoints.
+
+```typescript
+import express from 'express';
+import { WaSP, createAdminRouter } from 'wasp-protocol';
+
+const app = express();
+app.use(express.json());
+
+const wasp = new WaSP(config);
+
+// Mount admin routes at any path
+app.use('/wa-admin', createAdminRouter(wasp, {
+  token: process.env.ADMIN_TOKEN,  // Bearer auth (highly recommended)
+}));
+```
+
+Endpoints provided:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | List all sessions with status + QR availability |
+| `GET` | `/:id` | Single session details |
+| `POST` | `/:id/connect` | Create + connect session (idempotent) |
+| `POST` | `/:id/disconnect` | Destroy session |
+| `GET` | `/:id/qr` | QR code as data URL (install `qrcode` pkg) or raw string |
+
+All endpoints require `Authorization: Bearer <token>` if `token` is set.
+Install `qrcode` for data URL output: `npm i qrcode`.
 
 ### Middleware
 
