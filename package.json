@@ -66,14 +66,16 @@
   },
   "homepage": "https://github.com/kobie3717/wasp#readme",
   "devDependencies": {
+    "@types/express": "^4.17.25",
     "@types/ioredis": "^4.28.10",
     "@types/node": "^20.19.37",
     "@types/pg": "^8.20.0",
+    "@types/qrcode": "^1.5.6",
     "@types/qrcode-terminal": "^0.12.2",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "@vitest/coverage-v8": "^1.6.1",
-    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "@whiskeysockets/baileys": "7.0.0-rc12",
     "eslint": "^8.57.1",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
@@ -86,9 +88,11 @@
     "qrcode-terminal": "^0.12.0"
   },
   "peerDependencies": {
-    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "@whiskeysockets/baileys": "7.0.0-rc12",
+    "express": "^4.0.0 || ^5.0.0",
     "ioredis": "^5.0.0",
-    "pg": "^8.0.0"
+    "pg": "^8.0.0",
+    "qrcode": "^1.5.0"
   },
   "peerDependenciesMeta": {
     "@whiskeysockets/baileys": {
@@ -99,6 +103,12 @@
     },
     "pg": {
       "optional": true
+    },
+    "express": {
+      "optional": "true"
+    },
+    "qrcode": {
+      "optional": "true"
     }
   },
   "engines": {
