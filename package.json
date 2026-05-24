@@ -16,6 +16,7 @@
     "wasp": "./dist/cli.js"
   },
   "scripts": {
+    "prepare": "[ -d src ] && npm run build || true",
     "postinstall": "[ -f scripts/patch-baileys.sh ] && bash scripts/patch-baileys.sh || true",
     "build": "tsup src/index.ts src/cli.ts --format cjs,esm --dts --clean",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
@@ -106,6 +107,7 @@
   },
   "files": [
     "dist",
+    "scripts",
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
