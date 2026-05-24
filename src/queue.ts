@@ -32,6 +32,7 @@ export class MessageQueue extends EventEmitter {
   private processing: Map<string, boolean> = new Map();
   private lastSent: Map<string, number> = new Map();
   private timelocked: Map<string, { expiresAt?: Date; enforcementType?: string }> = new Map();
+  private sleepAbortHandlers: Map<string, (() => void)[]> = new Map();
 
   constructor(options?: Partial<QueueOptions>) {
     super();
@@ -131,13 +132,23 @@ export class MessageQueue extends EventEmitter {
       // This allows higher priority items to jump ahead
       if (delay > 0) {
         this.emit('delay', { sessionId, delay, queueSize: queue.length });
-        await this.sleep(delay);
+        await this.sleep(delay, sessionId);
+      }
+
+      // Queue may have been interrupted/cleared during the sleep window
+      if (!this.queues.has(sessionId)) {
+        this.processing.set(sessionId, false);
+        return;
       }
 
       // Re-sort queue (in case higher priority items arrived during delay)
       // and remove the highest priority item
       queue.sort((a, b) => b.priority - a.priority);
-      const itemToSend = queue.shift()!;
+      const itemToSend = queue.shift();
+      if (!itemToSend) {
+        this.processing.set(sessionId, false);
+        return;
+      }
 
       // Send message (will be handled by the caller's sendFn)
       try {
@@ -242,12 +253,76 @@ export class MessageQueue extends EventEmitter {
   }
 
   /**
-   * Sleep for specified duration
-   *
-   * @param ms Milliseconds to sleep
+   * Sleep for specified duration, interruptible via interrupt()
    */
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private sleep(ms: number, sessionId?: string): Promise<void> {
+    return new Promise((resolve) => {
+      let abortFn: (() => void) | undefined;
+
+      const timer = setTimeout(() => {
+        if (sessionId && abortFn) {
+          const handlers = this.sleepAbortHandlers.get(sessionId);
+          if (handlers) {
+            const idx = handlers.indexOf(abortFn);
+            if (idx > -1) handlers.splice(idx, 1);
+          }
+        }
+        resolve();
+      }, ms);
+
+      if (sessionId) {
+        abortFn = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        if (!this.sleepAbortHandlers.has(sessionId)) {
+          this.sleepAbortHandlers.set(sessionId, []);
+        }
+        this.sleepAbortHandlers.get(sessionId)!.push(abortFn);
+      }
+    });
+  }
+
+  /**
+   * Interrupt all pending and in-flight messages for a session.
+   *
+   * Wakes any sleeping processQueue, drains the queue (rejecting all items),
+   * and emits 'interrupted'. Use for /stop or bid-conflict resolution.
+   */
+  interrupt(sessionId: string): void {
+    const handlers = this.sleepAbortHandlers.get(sessionId) ?? [];
+    handlers.forEach((abort) => abort());
+    this.sleepAbortHandlers.delete(sessionId);
+
+    const queue = this.queues.get(sessionId);
+    if (queue) {
+      queue.forEach((item) => item.reject(new Error('Queue interrupted')));
+      queue.length = 0;
+    }
+    this.queues.delete(sessionId);
+    this.processing.set(sessionId, false);
+
+    this.emit('interrupted', { sessionId });
+  }
+
+  /**
+   * Bypass the queue and execute a QueueItem immediately.
+   *
+   * For priority commands (/stop, /approve, /deny) that must not wait
+   * behind pending messages. Does not affect the existing queue.
+   */
+  async bypass(sessionId: string, item: QueueItem): Promise<Message> {
+    this.emit('bypass', { sessionId, to: item.to });
+    try {
+      const result = item.resolve();
+      if (result && typeof result === 'object' && 'then' in result) {
+        return await (result as Promise<Message>);
+      }
+      return {} as Message;
+    } catch (error) {
+      item.reject(error as Error);
+      throw error;
+    }
   }
 
   /**
@@ -297,9 +372,12 @@ export class MessageQueue extends EventEmitter {
    * @param sessionId Session ID
    */
   clearQueue(sessionId: string): void {
+    const handlers = this.sleepAbortHandlers.get(sessionId) ?? [];
+    handlers.forEach((abort) => abort());
+    this.sleepAbortHandlers.delete(sessionId);
+
     const queue = this.queues.get(sessionId);
     if (queue) {
-      // Reject all pending items
       queue.forEach((item) => {
         item.reject(new Error('Queue cleared'));
       });
@@ -322,6 +400,7 @@ export class MessageQueue extends EventEmitter {
     this.processing.clear();
     this.lastSent.clear();
     this.timelocked.clear();
+    this.sleepAbortHandlers.clear();
   }
 
   /**

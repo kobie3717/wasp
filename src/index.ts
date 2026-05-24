@@ -84,6 +84,10 @@ export {
   errorHandler,
 } from './middleware.js';
 
+// Session key utilities
+export { buildSessionKey, parseSessionKey } from './session-key.js';
+export type { Platform, ChatType, SessionKeyParts } from './session-key.js';
+
 // Errors
 export {
   SessionNotFoundError,
