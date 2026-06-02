@@ -49,6 +49,7 @@ export enum EventType {
   GROUP_LEAVE = 'GROUP_LEAVE',
   PRESENCE_UPDATE = 'PRESENCE_UPDATE',
   REACHOUT_TIMELOCK = 'REACHOUT_TIMELOCK',
+  BAN_RISK_HIGH = 'BAN_RISK_HIGH',
 }
 
 /**
@@ -470,6 +471,16 @@ export interface WaspConfig {
 
   /** Webhook configurations */
   webhooks?: WebhookConfig[];
+
+  /** Ban risk detector configuration */
+  banRiskDetector?: {
+    enabled?: boolean;
+    checkInterval?: number;
+    rapidRestartThreshold?: number;
+    highErrorRatePercent?: number;
+    disconnectThreshold?: number;
+    qrRescanThreshold?: number;
+  };
 }
 
 /**

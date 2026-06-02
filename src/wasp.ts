@@ -11,6 +11,7 @@ import { MemoryStore } from './stores/memory.js';
 import { SessionNotFoundError } from './errors.js';
 import { WebhookManager } from './webhook.js';
 import { ClockSync } from './clock-sync.js';
+import { BanRiskDetector } from './ban-risk-detector.js';
 import type {
   WaspConfig,
   Session,
@@ -80,6 +81,7 @@ export class WaSP extends EventEmitter {
   private cacheStoreImpl: CacheStore;
   private metricsStoreImpl: MetricsStore;
   private clockSyncImpl: ClockSync;
+  private banRiskDetectorImpl: BanRiskDetector;
   private queue: MessageQueue;
   private activeSessions: Map<string, { session: Session; provider: Provider }> = new Map();
   private middlewares: Middleware[] = [];
@@ -119,6 +121,13 @@ export class WaSP extends EventEmitter {
     this.clockSyncImpl = new ClockSync();
     this.queue = new MessageQueue(this.config.queue);
 
+    // Initialize ban risk detector
+    this.banRiskDetectorImpl = new BanRiskDetector(
+      this.metricsStoreImpl,
+      this.cacheStoreImpl,
+      config?.banRiskDetector
+    );
+
     // Setup webhooks if configured
     if (config?.webhooks && config.webhooks.length > 0) {
       this.webhookManager = new WebhookManager(config.webhooks, this.config.logger);
@@ -126,6 +135,25 @@ export class WaSP extends EventEmitter {
 
     // Setup queue event forwarding
     this.setupQueueEvents();
+
+    // Start ban risk monitoring
+    this.banRiskDetectorImpl.start(
+      () => Array.from(this.activeSessions.keys()),
+      async (riskEvent) => {
+        this.log('warn', 'Ban risk detected', {
+          sessionId: riskEvent.sessionId,
+          level: riskEvent.riskLevel,
+          signals: riskEvent.signals
+        });
+
+        await this.emitEvent({
+          type: 'BAN_RISK_HIGH' as EventType,
+          sessionId: riskEvent.sessionId,
+          timestamp: riskEvent.timestamp,
+          data: riskEvent,
+        });
+      }
+    );
 
     this.log('info', 'WaSP initialized', { config: this.config });
   }
@@ -153,6 +181,13 @@ export class WaSP extends EventEmitter {
     // Check if session already exists
     if (this.activeSessions.has(id)) {
       throw new Error(`Session ${id} already exists`);
+    }
+
+    // Check if this is a restart (session exists in store but not in memory)
+    const existingSession = await this.sessionStore.load(id);
+    if (existingSession) {
+      // Record restart for ban risk detection
+      await this.banRiskDetectorImpl.recordRestart(id);
     }
 
     // Create session object
@@ -311,6 +346,9 @@ export class WaSP extends EventEmitter {
 
       this.messageStats.sent++;
 
+      // Track message sent for ban risk detection
+      await this.metricsStoreImpl.increment(sessionId, 'messages_sent', 1);
+
       await this.emitEvent({
         type: 'MESSAGE_SENT' as EventType,
         sessionId,
@@ -337,6 +375,9 @@ export class WaSP extends EventEmitter {
         const sent = await provider.sendMessage(to, content, options);
 
         this.messageStats.sent++;
+
+        // Track message sent for ban risk detection
+        await this.metricsStoreImpl.increment(sessionId, 'messages_sent', 1);
 
         await this.emitEvent({
           type: 'MESSAGE_SENT' as EventType,
@@ -468,6 +509,13 @@ export class WaSP extends EventEmitter {
   }
 
   /**
+   * Get ban risk detector
+   */
+  get banRiskDetector(): BanRiskDetector {
+    return this.banRiskDetectorImpl;
+  }
+
+  /**
    * Get health and statistics
    *
    * Returns current system health including uptime, session counts,
@@ -574,6 +622,9 @@ export class WaSP extends EventEmitter {
         status: 'DISCONNECTED' as SessionStatus,
       });
 
+      // Record disconnect for ban risk detection
+      await this.banRiskDetectorImpl.recordDisconnect(sessionId);
+
       // Evict from activeSessions so consumer can call createSession() to reconnect.
       // Without this, transient drops (Baileys reason -1, 515, 503) leave a zombie
       // entry that blocks reconnect with "Session already exists".
@@ -597,6 +648,9 @@ export class WaSP extends EventEmitter {
 
     // QR code
     provider.events.on('qr', async (qr) => {
+      // Record QR scan for ban risk detection
+      await this.banRiskDetectorImpl.recordQRScan(sessionId);
+
       await this.emitEvent({
         type: 'SESSION_QR' as EventType,
         sessionId,
@@ -622,6 +676,22 @@ export class WaSP extends EventEmitter {
     // Error
     provider.events.on('error', async (error) => {
       this.log('error', 'Provider error', { sessionId, error });
+
+      // Record message error for ban risk detection if it's a send error
+      const errorMsg = error?.message ?? error?.toString() ?? '';
+      if (errorMsg.toLowerCase().includes('send') || errorMsg.toLowerCase().includes('message')) {
+        await this.banRiskDetectorImpl.recordMessageError(sessionId);
+      }
+
+      // Check for rate limit errors
+      if (errorMsg.toLowerCase().includes('rate') || errorMsg.toLowerCase().includes('429')) {
+        await this.banRiskDetectorImpl.recordRateLimitError(sessionId);
+      }
+
+      // Check for reachout restricted errors
+      if (errorMsg.toLowerCase().includes('reachout') || errorMsg.toLowerCase().includes('restricted')) {
+        await this.banRiskDetectorImpl.recordReachoutRestricted(sessionId);
+      }
 
       await this.emitEvent({
         type: 'SESSION_ERROR' as EventType,

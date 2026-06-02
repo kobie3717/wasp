@@ -16,6 +16,8 @@ export { WebhookManager } from './webhook.js';
 export { wrapSocket } from './wrap-socket.js';
 export type { WrappedSocket } from './wrap-socket.js';
 export { ClockSync } from './clock-sync.js';
+export { BanRiskDetector } from './ban-risk-detector.js';
+export type { BanRiskEvent, BanRiskLevel, BanRiskConfig } from './ban-risk-detector.js';
 
 // Types
 export type {
