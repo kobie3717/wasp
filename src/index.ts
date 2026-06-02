@@ -98,3 +98,16 @@ export {
   QueueFullError,
   InvalidTableNameError,
 } from './errors.js';
+
+// Auth utilities
+export { normalizeCreds, scoreCreds, selectBestCreds } from './auth/creds-utils.js';
+export type { LayeredAuthOptions } from './auth/layered-auth-state.js';
+export { useLayeredAuthState } from './auth/layered-auth-state.js';
+
+// Observability
+export { startWaspHealthServer } from './observability/health-server.js';
+export type { HealthServerOptions, HealthServerHandle, WaspHealthState } from './observability/health-server.js';
+
+// Cache
+export { createUnifiedCacheStore } from './cache/unified-cache.js';
+export type { UnifiedCacheStore, UnifiedCacheOptions } from './cache/unified-cache.js';
