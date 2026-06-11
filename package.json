@@ -1,6 +1,6 @@
 {
   "name": "wasp-protocol",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "WhatsApp Session Protocol for Node.js — built-in reconnection, rate limiting, secure credential storage, and multi-tenant isolation. Baileys session management layer. Production-ready.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

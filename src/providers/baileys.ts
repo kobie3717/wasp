@@ -50,6 +50,18 @@ export interface BaileysProviderOptions {
   allowedMediaDir?: string;
   /** TC token configuration for error 463 prevention */
   tcTokenConfig?: import('../types.js').TcTokenConfig;
+  /** Mark account as online when connecting (default: false — less bot-like) */
+  markOnlineOnConnect?: boolean;
+  /** WebSocket keepalive ping interval in ms (default: 30000) */
+  keepAliveIntervalMs?: number;
+  /** Connection timeout in ms (default: 60000) */
+  connectTimeoutMs?: number;
+  /** Default query timeout in ms (default: 60000) */
+  defaultQueryTimeoutMs?: number;
+  /** Sync full message history on connect (default: false — saves memory) */
+  syncFullHistory?: boolean;
+  /** Fire init queries on connect (default: false — faster connect) */
+  fireInitQueries?: boolean;
 }
 
 /**
@@ -109,6 +121,12 @@ export class BaileysProvider implements Provider {
       internalReconnect: options?.internalReconnect ?? false,
       allowedMediaDir: options?.allowedMediaDir ?? '',
       tcTokenConfig: options?.tcTokenConfig ?? {},
+      markOnlineOnConnect: options?.markOnlineOnConnect ?? false,
+      keepAliveIntervalMs: options?.keepAliveIntervalMs ?? 30000,
+      connectTimeoutMs: options?.connectTimeoutMs ?? 60000,
+      defaultQueryTimeoutMs: options?.defaultQueryTimeoutMs ?? 60000,
+      syncFullHistory: options?.syncFullHistory ?? false,
+      fireInitQueries: options?.fireInitQueries ?? false,
     };
 
     // Ensure auth directory exists
@@ -198,8 +216,12 @@ export class BaileysProvider implements Provider {
         logger: this.options.logger,
         printQRInTerminal: this.options.printQR,
         browser: this.options.browser,
-        syncFullHistory: false,
-        markOnlineOnConnect: true,
+        syncFullHistory: this.options.syncFullHistory,
+        markOnlineOnConnect: this.options.markOnlineOnConnect,
+        fireInitQueries: this.options.fireInitQueries,
+        keepAliveIntervalMs: this.options.keepAliveIntervalMs,
+        connectTimeoutMs: this.options.connectTimeoutMs,
+        defaultQueryTimeoutMs: this.options.defaultQueryTimeoutMs,
         ...(agent ? { agent, fetchAgent: agent } : {}),
         // Required for group message handling
         getMessage: async () => undefined,
