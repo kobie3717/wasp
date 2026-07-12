@@ -12,6 +12,7 @@ import { SessionNotFoundError } from './errors.js';
 import { WebhookManager } from './webhook.js';
 import { ClockSync } from './clock-sync.js';
 import { BanRiskDetector } from './ban-risk-detector.js';
+import { WaspHealthMonitor } from './observability/health-monitor.js';
 import type {
   WaspConfig,
   Session,
@@ -82,6 +83,7 @@ export class WaSP extends EventEmitter {
   private metricsStoreImpl: MetricsStore;
   private clockSyncImpl: ClockSync;
   private banRiskDetectorImpl: BanRiskDetector;
+  private healthMonitorImpl: WaspHealthMonitor | null = null;
   private queue: MessageQueue;
   private activeSessions: Map<string, { session: Session; provider: Provider }> = new Map();
   private middlewares: Middleware[] = [];
@@ -154,6 +156,21 @@ export class WaSP extends EventEmitter {
         });
       }
     );
+
+    // Setup health monitor if enabled
+    if (config?.healthMonitor) {
+      const healthOpts = typeof config.healthMonitor === 'boolean'
+        ? {}
+        : config.healthMonitor;
+
+      this.healthMonitorImpl = new WaspHealthMonitor(this, {
+        ...healthOpts,
+        logger: healthOpts.logger ?? this.config.logger,
+      });
+
+      this.healthMonitorImpl.start();
+      this.log('info', 'WaSP health monitor started');
+    }
 
     this.log('info', 'WaSP initialized', { config: this.config });
   }
@@ -516,6 +533,46 @@ export class WaSP extends EventEmitter {
   }
 
   /**
+   * Get health monitor
+   */
+  get healthMonitor(): WaspHealthMonitor | null {
+    return this.healthMonitorImpl;
+  }
+
+  /**
+   * Get cached QR code for a session
+   *
+   * Retrieves QR code from store. Useful in worker/API split architectures
+   * where the QR event listener runs in a worker but the API needs to serve
+   * the QR to clients.
+   *
+   * @param sessionId Session ID
+   * @returns QR code string or null if not found/expired
+   *
+   * @example
+   * ```typescript
+   * const qr = await wasp.getQR('session-1');
+   * if (qr) {
+   *   res.json({ qr });
+   * }
+   * ```
+   */
+  async getQR(sessionId: string): Promise<string | null> {
+    // Check if store has QR methods (RedisStore/MemoryStore)
+    if (typeof (this.sessionStore as any).getQR === 'function') {
+      return await (this.sessionStore as any).getQR(sessionId);
+    }
+
+    // Fall back to provider's in-memory QR if session is active
+    const entry = this.activeSessions.get(sessionId);
+    if (entry?.provider && entry.provider.getQR) {
+      return await entry.provider.getQR();
+    }
+
+    return null;
+  }
+
+  /**
    * Get health and statistics
    *
    * Returns current system health including uptime, session counts,
@@ -580,20 +637,32 @@ export class WaSP extends EventEmitter {
       return (options as any).mockProvider as Provider;
     }
 
+    let provider: Provider;
+
     switch (type) {
       case 'BAILEYS': {
         const { BaileysProvider } = await import('./providers/baileys.js');
-        return new BaileysProvider(options as any);
+        provider = new BaileysProvider(options as any);
+
+        // Inject QR store if available
+        if (typeof (this.sessionStore as any).saveQR === 'function') {
+          (provider as any).setQRStore(this.sessionStore);
+        }
+
+        break;
       }
       case 'WHATSMEOW':
         throw new Error('Whatsmeow provider not yet implemented');
       case 'CLOUD_API': {
         const { CloudAPIProvider } = await import('./providers/cloud-api.js');
-        return new CloudAPIProvider(options as any);
+        provider = new CloudAPIProvider(options as any);
+        break;
       }
       default:
         throw new Error(`Unknown provider type: ${type}`);
     }
+
+    return provider;
   }
 
   /**

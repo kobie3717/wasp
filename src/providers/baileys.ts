@@ -110,6 +110,9 @@ export class BaileysProvider implements Provider {
   private processedMessages: Set<string> = new Set();
   private readonly MAX_PROCESSED_MESSAGES = 1000;
 
+  // QR code store (optional - injected from WaSP)
+  private qrStore: { saveQR(sessionId: string, qr: string, ttl?: number): Promise<void> } | null = null;
+
   constructor(options?: BaileysProviderOptions) {
     this.options = {
       authDir: options?.authDir ?? './auth_states',
@@ -134,6 +137,17 @@ export class BaileysProvider implements Provider {
     if (authDir && !fs.existsSync(authDir)) {
       fs.mkdirSync(authDir, { recursive: true });
     }
+  }
+
+  /**
+   * Set QR store for caching QR codes
+   *
+   * Called by WaSP to inject store backend for QR caching.
+   *
+   * @param store Store with saveQR method
+   */
+  setQRStore(store: { saveQR(sessionId: string, qr: string, ttl?: number): Promise<void> }): void {
+    this.qrStore = store;
   }
 
   /**
@@ -284,6 +298,16 @@ export class BaileysProvider implements Provider {
             timestamp: new Date(),
             data: { qr },
           });
+
+          // Cache QR code if store is available
+          if (this.qrStore && this.currentSessionId) {
+            try {
+              await this.qrStore.saveQR(this.currentSessionId, qr);
+            } catch (error) {
+              // QR caching is best-effort - don't fail session creation
+              console.warn('[BaileysProvider] Failed to cache QR:', error);
+            }
+          }
         }
 
         // Reachout timelock detection

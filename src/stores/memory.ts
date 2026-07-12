@@ -352,4 +352,58 @@ export class MemoryStore implements Backend {
       this.cacheSweepInterval = null;
     }
   }
+
+  // ============================================================================
+  // QR Code storage (for worker/API split architectures)
+  // ============================================================================
+
+  /**
+   * Save QR code with TTL
+   *
+   * Stores QR code emitted during session creation so worker/API split
+   * architectures can retrieve it without needing a live event listener.
+   *
+   * @param sessionId Session ID
+   * @param qr QR code string
+   * @param ttlSeconds TTL in seconds (default: 120)
+   */
+  async saveQR(sessionId: string, qr: string, ttlSeconds: number = 120): Promise<void> {
+    try {
+      const key = `qr:${sessionId}`;
+      const ttlMs = ttlSeconds * 1000;
+      await this.setCached('wasp', key, qr, ttlMs);
+    } catch (error) {
+      console.warn(`[MemoryStore] QR save error for ${sessionId}:`, error);
+    }
+  }
+
+  /**
+   * Get stored QR code
+   *
+   * @param sessionId Session ID
+   * @returns QR code string or null if not found/expired
+   */
+  async getQR(sessionId: string): Promise<string | null> {
+    try {
+      const key = `qr:${sessionId}`;
+      return await this.getCached<string>('wasp', key);
+    } catch (error) {
+      console.warn(`[MemoryStore] QR read error for ${sessionId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Delete stored QR code
+   *
+   * @param sessionId Session ID
+   */
+  async deleteQR(sessionId: string): Promise<void> {
+    try {
+      const key = `qr:${sessionId}`;
+      await this.deleteCached('wasp', key);
+    } catch (error) {
+      console.warn(`[MemoryStore] QR delete error for ${sessionId}:`, error);
+    }
+  }
 }

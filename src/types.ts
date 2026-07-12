@@ -413,9 +413,35 @@ export interface MetricsStore {
 }
 
 /**
- * Backend interface - composes all four domain stores
+ * QR code store interface - QR code caching for worker/API split architectures
  */
-export interface Backend extends SessionStore, CredentialStore, CacheStore, MetricsStore {}
+export interface QRStore {
+  /**
+   * Save QR code with TTL
+   * @param sessionId Session ID
+   * @param qr QR code string
+   * @param ttlSeconds TTL in seconds (default: 120)
+   */
+  saveQR(sessionId: string, qr: string, ttlSeconds?: number): Promise<void>;
+
+  /**
+   * Get stored QR code
+   * @param sessionId Session ID
+   * @returns QR code string or null if not found/expired
+   */
+  getQR(sessionId: string): Promise<string | null>;
+
+  /**
+   * Delete stored QR code
+   * @param sessionId Session ID
+   */
+  deleteQR(sessionId: string): Promise<void>;
+}
+
+/**
+ * Backend interface - composes all domain stores
+ */
+export interface Backend extends SessionStore, CredentialStore, CacheStore, MetricsStore, QRStore {}
 
 /**
  * Webhook configuration
@@ -480,6 +506,17 @@ export interface WaspConfig {
     highErrorRatePercent?: number;
     disconnectThreshold?: number;
     qrRescanThreshold?: number;
+  };
+
+  /** Health monitor configuration (proactive pong timer) */
+  healthMonitor?: boolean | {
+    intervalMs?: number;
+    stalenessThresholdMs?: number;
+    logMemory?: boolean;
+    logger?: {
+      info(msg: string, ctx?: any): void;
+      warn(msg: string, ctx?: any): void;
+    };
   };
 }
 

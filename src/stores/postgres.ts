@@ -66,6 +66,7 @@ export class PostgresStore implements Backend {
   private credentialsTable: string;
   private cacheTable: string;
   private metricsTable: string;
+  private qrTable: string;
 
   constructor(config?: PostgresStoreConfig) {
     const tableName = config?.tableName ?? 'wasp_sessions';
@@ -83,6 +84,7 @@ export class PostgresStore implements Backend {
     this.credentialsTable = `${tablePrefix}_credentials`;
     this.cacheTable = `${tablePrefix}_cache`;
     this.metricsTable = `${tablePrefix}_metrics`;
+    this.qrTable = `${tablePrefix}_qr_codes`;
 
     this.config = {
       connectionString: config?.connectionString ?? 'postgresql://localhost/wasp',
@@ -200,10 +202,24 @@ export class PostgresStore implements Backend {
         ON ${this.metricsTable}(session_id);
     `;
 
+    // QR codes table
+    const createQRSQL = `
+      CREATE TABLE IF NOT EXISTS ${this.qrTable} (
+        session_id VARCHAR(255) PRIMARY KEY,
+        qr_code TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMP NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_${this.qrTable}_expires_at
+        ON ${this.qrTable}(expires_at);
+    `;
+
     await this.pool.query(createSessionsSQL);
     await this.pool.query(createCredentialsSQL);
     await this.pool.query(createCacheSQL);
     await this.pool.query(createMetricsSQL);
+    await this.pool.query(createQRSQL);
   }
 
   /**
@@ -601,5 +617,72 @@ export class PostgresStore implements Backend {
     const result = await this.pool.query(sql);
 
     return parseInt(result.rows[0]?.count ?? 0, 10);
+  }
+
+  // ============================================================================
+  // QR Code storage (for worker/API split architectures)
+  // ============================================================================
+
+  /**
+   * Save QR code with TTL
+   *
+   * Stores QR code emitted during session creation so worker/API split
+   * architectures can retrieve it without needing a live event listener.
+   *
+   * @param sessionId Session ID
+   * @param qr QR code string
+   * @param ttlSeconds TTL in seconds (default: 120)
+   */
+  async saveQR(sessionId: string, qr: string, ttlSeconds: number = 120): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.pool) throw new Error('Pool not initialized');
+
+    const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+
+    const sql = `
+      INSERT INTO ${this.qrTable} (session_id, qr_code, expires_at)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (session_id)
+      DO UPDATE SET qr_code = $2, created_at = NOW(), expires_at = $3
+    `;
+
+    await this.pool.query(sql, [sessionId, qr, expiresAt]);
+  }
+
+  /**
+   * Get stored QR code
+   *
+   * @param sessionId Session ID
+   * @returns QR code string or null if not found/expired
+   */
+  async getQR(sessionId: string): Promise<string | null> {
+    await this.ensureInitialized();
+    if (!this.pool) throw new Error('Pool not initialized');
+
+    const sql = `
+      SELECT qr_code FROM ${this.qrTable}
+      WHERE session_id = $1 AND expires_at > NOW()
+    `;
+
+    const result = await this.pool.query(sql, [sessionId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return result.rows[0].qr_code;
+  }
+
+  /**
+   * Delete stored QR code
+   *
+   * @param sessionId Session ID
+   */
+  async deleteQR(sessionId: string): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.pool) throw new Error('Pool not initialized');
+
+    const sql = `DELETE FROM ${this.qrTable} WHERE session_id = $1`;
+    await this.pool.query(sql, [sessionId]);
   }
 }

@@ -550,4 +550,53 @@ export class RedisStore implements Backend {
 
     return count;
   }
+
+  // ============================================================================
+  // QR Code storage (for worker/API split architectures)
+  // ============================================================================
+
+  /**
+   * Save QR code with TTL
+   *
+   * Stores QR code emitted during session creation so worker/API split
+   * architectures can retrieve it without needing a live event listener.
+   *
+   * @param sessionId Session ID
+   * @param qr QR code string
+   * @param ttlSeconds TTL in seconds (default: 120)
+   */
+  async saveQR(sessionId: string, qr: string, ttlSeconds: number = 120): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.redis) throw new Error('Redis not initialized');
+
+    const key = `${this.config.keyPrefix}qr:${sessionId}`;
+    await this.redis.set(key, qr, 'EX', ttlSeconds);
+  }
+
+  /**
+   * Get stored QR code
+   *
+   * @param sessionId Session ID
+   * @returns QR code string or null if not found/expired
+   */
+  async getQR(sessionId: string): Promise<string | null> {
+    await this.ensureInitialized();
+    if (!this.redis) throw new Error('Redis not initialized');
+
+    const key = `${this.config.keyPrefix}qr:${sessionId}`;
+    return await this.redis.get(key);
+  }
+
+  /**
+   * Delete stored QR code
+   *
+   * @param sessionId Session ID
+   */
+  async deleteQR(sessionId: string): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.redis) throw new Error('Redis not initialized');
+
+    const key = `${this.config.keyPrefix}qr:${sessionId}`;
+    await this.redis.del(key);
+  }
 }

@@ -30,6 +30,7 @@ export type {
   CredentialStore,
   CacheStore,
   MetricsStore,
+  QRStore,
   Backend,
   WaspEvent,
   SendMessageOptions,
@@ -83,7 +84,24 @@ export {
   logger,
   autoReconnect,
   rateLimit,
+  getRateLimitStats,
+  timeUntilNext,
   errorHandler,
+  findTrigger,
+  advancedOperatorsSearch,
+} from './middleware.js';
+
+export type {
+  LoggerOptions,
+  AutoReconnectOptions,
+  RateLimitOptions,
+  RateLimitStats,
+  GlobalRateLimitStats,
+  ErrorCallback,
+  TriggerDefinition,
+  TriggerMatch,
+  TriggerType,
+  TriggerOperator,
 } from './middleware.js';
 
 // Session key utilities
@@ -107,6 +125,8 @@ export { useLayeredAuthState } from './auth/layered-auth-state.js';
 // Observability
 export { startWaspHealthServer } from './observability/health-server.js';
 export type { HealthServerOptions, HealthServerHandle, WaspHealthState } from './observability/health-server.js';
+export { WaspHealthMonitor } from './observability/health-monitor.js';
+export type { HealthMonitorOptions, HealthTickData, SessionStaleData } from './observability/health-monitor.js';
 
 // Cache
 export { createUnifiedCacheStore } from './cache/unified-cache.js';
