@@ -377,8 +377,13 @@ export class BaileysProvider implements Provider {
                 });
               }
             } else {
-              // Bad MAC persists — full reset needed
-              fs.rmSync(authDir, { recursive: true, force: true });
+              // WaSP PATCH (moved from downstream patch-package into source 2026-07-26):
+              // Do NOT delete auth on Bad MAC retry exhaustion — let the consuming app's
+              // own auth backup/restore handle it instead. A previous patch-package patch
+              // targeted the built dist/ chunk directly; that chunk's content-hashed
+              // filename isn't stable across builds, so the patch silently stopped
+              // applying once the hash changed. Fixed at the source instead.
+              // fs.rmSync(authDir, { recursive: true, force: true });
               this.events.emit('disconnected', { reason: 'loggedOut', shouldReconnect: false });
               this.events.emit('event', {
                 type: EventType.SESSION_ERROR,
