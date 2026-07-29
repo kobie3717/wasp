@@ -13,3 +13,11 @@ export type { ErrorCallback } from './middleware/errorHandler.js';
 
 export { rateLimit } from './middleware/rateLimit.js';
 export type { RateLimitOptions } from './middleware/rateLimit.js';
+
+export { findTrigger, advancedOperatorsSearch } from './middleware/triggerRouter.js';
+export type {
+  TriggerDefinition,
+  TriggerMatch,
+  TriggerType,
+  TriggerOperator,
+} from './middleware/triggerRouter.js';
