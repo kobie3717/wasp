@@ -56,7 +56,7 @@ const qrCache = new Map<string, string>();
 export function createAdminRouter(wasp: WaSP, options: AdminRouterOptions = {}): ExpressRouter {
   let express: ExpressModule;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
     express = require('express') as ExpressModule;
   } catch {
     throw new Error(

@@ -11,8 +11,8 @@
  *   telegram:private:123456789
  */
 
-export type Platform = 'whatsapp' | 'telegram' | 'instagram' | (string & {});
-export type ChatType = 'private' | 'group' | 'channel' | (string & {});
+export type Platform = 'whatsapp' | 'telegram' | 'instagram' | (string & Record<never, never>);
+export type ChatType = 'private' | 'group' | 'channel' | (string & Record<never, never>);
 
 export interface SessionKeyParts {
   platform: Platform;

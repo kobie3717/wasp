@@ -247,7 +247,9 @@ describe('Health stats', () => {
     const health = wasp.getHealth();
 
     expect(health).toBeDefined();
-    expect(health.uptime).toBeGreaterThan(0);
+    // >= 0: uptime is Date.now() - startTime in ms, which is legitimately 0
+    // when the assertion runs within the same millisecond the server started.
+    expect(health.uptime).toBeGreaterThanOrEqual(0);
     expect(health.sessions.total).toBe(1);
     expect(health.sessions.connected + health.sessions.disconnected).toBe(1);
     expect(health.messages.sent).toBe(1);

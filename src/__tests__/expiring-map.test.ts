@@ -2,7 +2,7 @@
  * ExpiringMapCache tests
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createExpiringMapCache } from '../cache/expiring-map.js';
 import type { ExpiringMapCache } from '../cache/expiring-map.js';
 
