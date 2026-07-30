@@ -2,7 +2,7 @@
  * Health monitor tests
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { WaSP } from '../wasp.js';
 import { WaspHealthMonitor } from '../observability/health-monitor.js';
 import { MemoryStore } from '../stores/memory.js';
